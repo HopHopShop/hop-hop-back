@@ -170,6 +170,11 @@ DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.RawMediaCloudinaryStorage"
 
 AUTH_USER_MODEL = "authentication.Customer"
 
+AUTHENTICATION_BACKENDS = [
+    'authentication.backends.CustomAuthenticationBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
 CLOUDINARY_STORAGE = {
     "CLOUD_NAME": os.getenv("CLOUD_NAME"),
     "API_KEY": os.getenv("API_KEY"),

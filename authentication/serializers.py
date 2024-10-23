@@ -181,6 +181,9 @@ class ResetPasswordRequestSerializer(serializers.ModelSerializer):
         if not user:
             raise serializers.ValidationError("There is no user with provided email")
 
+        if not user.is_active:
+            raise ValidationError("Your account is banned, please contact the administration.")
+
         token_generator = PasswordResetTokenGenerator()
         token = token_generator.make_token(user)
 
