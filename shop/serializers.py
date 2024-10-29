@@ -98,6 +98,7 @@ class ProductImageUploadSerializer(serializers.Serializer):
 class ProductSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField()
     category = CategorySerializer(read_only=True)
+    price = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -111,6 +112,11 @@ class ProductSerializer(serializers.ModelSerializer):
             "images",
         ]
         read_only_fields = ["slug"]
+
+    def get_price(self, obj):
+        if obj.price % 1 == 0:
+            return str(int(obj.price))
+        return str(obj.price)
 
     def get_images(self, obj):
         first_image = obj.product_images.first()
