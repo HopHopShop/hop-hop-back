@@ -1,0 +1,37 @@
+name: Deploy Backend to Company Repo
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Backend Repo
+        uses: actions/checkout@v3
+
+      - name: Push to Company Deployment Repo
+        env:
+          TOKEN: ${{ secrets.COMPANY_REPO_TOKEN }}
+        run: |
+          git config --global user.email "hophopshopme@gmail.com"
+          git config --global user.name "HopHopShop"
+
+          # Клонуємо компанійський репозиторій
+          git clone https://$TOKEN@github.com/HopHopShop/hophop-deployment.git
+          cd hophop-deployment
+
+          # Видаляємо вміст папки back і створюємо її знову
+          rm -rf back
+          mkdir back
+
+          # Копіюємо файли з бекенд-репозиторію, виключаючи hophop-deployment та .github/workflows
+          rsync -av --exclude='hophop-deployment' --exclude='.github/workflows' ../ back/
+
+          # Коміт та пуш у компанійський репозиторій
+          git add .
+          git commit -m "Deploy backend updates to company repo"
+          git push origin main
