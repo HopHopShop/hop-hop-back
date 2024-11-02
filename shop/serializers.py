@@ -130,6 +130,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
     images = ProductImageSerializer(many=True, read_only=True, source="product_images")
     slug = serializers.CharField(read_only=True)
+    price = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -144,6 +145,11 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "attributes",
             "images",
         ]
+
+    def get_price(self, obj):
+        if obj.price % 1 == 0:
+            return str(int(obj.price))
+        return str(obj.price)
 
 
 class ProductCreateUpdateSerializer(serializers.ModelSerializer):
