@@ -78,7 +78,7 @@ class ProductImage(models.Model):
         return f"Image for {self.product.name}"
 
     class Meta:
-        ordering = ["order", "-id"]
+        ordering = ["order", "id"]
         app_label = "shop"
 
 
