@@ -1,4 +1,5 @@
-from drf_spectacular.utils import extend_schema
+from rest_framework.filters import OrderingFilter
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework import status, generics, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -8,7 +9,7 @@ from cart.serializers import CouponSerializer, UseCouponSerializer, CartSerializ
 from shop.models import Product
 from cart.services import CartService
 from utils.custom_exceptions import (
-    ProductNotExistException,
+    ProductNotExistException, CouponNotExistException,
 )
 from utils.pagination import Pagination
 
@@ -17,8 +18,18 @@ def cart_session_response(cart_service):
     cart_items = cart_service
     total_price = cart_service.get_total_price()
     total_items = cart_service.get_total_item()
-    coupon_is_used = cart_service.coupon_is_used()
     session_id = cart_service.get_session_id()
+
+    coupon_is_used = cart_service.coupon_is_used()
+    coupon = cart_service.get_coupon()
+    if coupon:
+        coupon_data = {
+            "name": coupon.code,
+            "discount": coupon.discount,
+        }
+    else:
+        coupon_data = None
+        coupon_is_used = False
 
     return {
         "products": cart_items,
@@ -26,6 +37,7 @@ def cart_session_response(cart_service):
         "subtotal_price": total_price,
         "total_price": total_price,
         "coupon_is_used": coupon_is_used,
+        "coupon": coupon_data,
         "sessionid": session_id
     }
 
@@ -118,7 +130,7 @@ class UseCouponView(APIView):
         try:
             coupon = Coupon.objects.get(code=code, active=True)
         except Coupon.DoesNotExist:
-            raise ProductNotExistException
+            raise CouponNotExistException
 
         cart = CartService(request)
         cart.add_coupon(coupon)
@@ -135,19 +147,30 @@ class RemoveCouponView(APIView):
     def post(self, request):
         cart = CartService(request)
         cart.remove_coupon()
-        return Response(cart, status=status.HTTP_200_OK)
+        response_data = cart_session_response(cart)
+        return Response(response_data, status=status.HTTP_200_OK)
 
 
 @extend_schema(tags=["coupon"])
 class CouponView(viewsets.ModelViewSet):
     queryset = Coupon.objects.all()
     serializer_class = CouponSerializer
+    filter_backends = [OrderingFilter]
+    ordering_fields = ['id']
     pagination_class = Pagination
     http_method_names = ["get", "post", "patch", "delete"]
 
     @extend_schema(
         summary="Retrieve a list of coupons",
         description="This endpoint returns a list of all coupons.",
+        parameters=[
+            OpenApiParameter(
+                name="ordering",
+                description="Ordering by ID (id - for ascending order, -id for descending)",
+                required=False,
+                type=str,
+            )
+        ],
     )
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)

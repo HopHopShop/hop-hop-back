@@ -13,6 +13,11 @@ class ProductNotExistException(APIException):
     default_detail = "Product does not exist."
 
 
+class CouponNotExistException(APIException):
+    status_code = 400
+    default_detail = "Coupon does not exist."
+
+
 class CartEmptyException(APIException):
     status_code = 400
     default_detail = "Cart is empty"

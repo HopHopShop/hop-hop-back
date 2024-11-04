@@ -21,7 +21,28 @@ class ProductImageSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "image",
+            "order"
         )
+
+
+class ChangeImageOrderingSerializer(serializers.Serializer):
+    image_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+        help_text="An ordered list of image IDs to reorder"
+    )
+
+    def validate_image_ids(self, value):
+        # Ensure that all IDs are valid and belong to the product
+        product = self.context
+        product_image_ids = product.product_images.values_list("id", flat=True)
+
+        print(product_image_ids)
+
+        if set(value) != set(product_image_ids):
+            raise serializers.ValidationError("Invalid image IDs provided.")
+
+        return value
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -77,6 +98,7 @@ class ProductImageUploadSerializer(serializers.Serializer):
 class ProductSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField()
     category = CategorySerializer(read_only=True)
+    price = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -91,6 +113,11 @@ class ProductSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["slug"]
 
+    def get_price(self, obj):
+        if obj.price % 1 == 0:
+            return str(int(obj.price))
+        return str(obj.price)
+
     def get_images(self, obj):
         first_image = obj.product_images.first()
         return ProductImageSerializer(first_image).data if first_image else None
@@ -103,6 +130,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
     images = ProductImageSerializer(many=True, read_only=True, source="product_images")
     slug = serializers.CharField(read_only=True)
+    price = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -118,12 +146,18 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "images",
         ]
 
+    def get_price(self, obj):
+        if obj.price % 1 == 0:
+            return str(int(obj.price))
+        return str(obj.price)
+
 
 class ProductCreateUpdateSerializer(serializers.ModelSerializer):
     attributes = ProductAttributesSerializer(
         source="product_attributes", required=False
     )
     slug = serializers.CharField(read_only=True)
+    SKU = serializers.CharField(required=False)
 
     class Meta:
         model = Product

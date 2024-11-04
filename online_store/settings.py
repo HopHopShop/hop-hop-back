@@ -52,12 +52,15 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "cloudinary_storage",
     "cloudinary",
+
     "authentication",
     "shop",
     "email_subscription",
     "cart",
     "wishlist",
     "checkout",
+    "news",
+    "contact_us"
 ]
 
 
@@ -167,6 +170,11 @@ DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.RawMediaCloudinaryStorage"
 
 AUTH_USER_MODEL = "authentication.Customer"
 
+AUTHENTICATION_BACKENDS = [
+    'authentication.backends.CustomAuthenticationBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
 CLOUDINARY_STORAGE = {
     "CLOUD_NAME": os.getenv("CLOUD_NAME"),
     "API_KEY": os.getenv("API_KEY"),
@@ -209,6 +217,7 @@ DRF_STANDARDIZED_ERRORS = {
         "utils.custom_exceptions.StripeGeneralError": "drf_standardized_errors.exceptions.BaseAPIException",
         "utils.custom_exceptions.ProductAlreadyExistException": "drf_standardized_errors.exceptions.BaseAPIException",
         "utils.custom_exceptions.ProductNotExistException": "drf_standardized_errors.exceptions.BaseAPIException",
+        "utils.custom_exceptions.CouponNotExistException": "drf_standardized_errors.exceptions.BaseAPIException",
         "utils.custom_exceptions.InvalidCredentialsError": "drf_standardized_errors.exceptions.BaseAPIException",
     },
 }

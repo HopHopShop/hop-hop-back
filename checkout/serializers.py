@@ -2,10 +2,10 @@ import datetime
 from decimal import Decimal
 
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 
-from cart.models import Coupon
 from checkout.models import Order, OrderItem
-from shop.models import Product
+from checkout.services import DashboardStatistic
 from shop.serializers import ProductSerializer
 
 
@@ -62,32 +62,16 @@ class CardInformationSerializer(serializers.Serializer):
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
-    product_id = serializers.SerializerMethodField()
-    product_name = serializers.SerializerMethodField()
-    product_price = serializers.SerializerMethodField()
-    total_price = serializers.SerializerMethodField()
+    product = ProductSerializer()
 
     class Meta:
         model = OrderItem
         fields = [
-            "product_id",
-            "product_name",
-            "product_price",
+            "order",
+            "product",
             "quantity",
-            "total_price",
+            "price",
         ]
-
-    def get_product_id(self, obj):
-        return obj.product_id
-
-    def get_product_name(self, obj):
-        return obj.product.name
-
-    def get_product_price(self, obj):
-        return float(obj.price)
-
-    def get_total_price(self, obj):
-        return obj.price * obj.quantity
 
 
 class OrderListSerializer(serializers.ModelSerializer):
@@ -114,23 +98,22 @@ class OrderListSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
-    card_information = CardInformationSerializer(write_only=True)
+    card_information = CardInformationSerializer(write_only=True, required=False)
     subtotal_price = serializers.SerializerMethodField()
     total_price = serializers.SerializerMethodField()
     discount = serializers.SerializerMethodField()
+    tax_percent = serializers.SerializerMethodField()
+    shipping_rate = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
         fields = [
             "id",
-            "created_at",
             "customer",
             "first_name",
             "last_name",
             "email",
             "phone",
-            "shipping_country",
-            "shipping_city",
             "shipping_address",
             "shipping_postcode",
             "payment_id",
@@ -141,6 +124,8 @@ class OrderSerializer(serializers.ModelSerializer):
             "subtotal_price",
             "total_price",
             "coupon",
+            "tax_percent",
+            "shipping_rate",
             "discount",
             "card_information",
         ]
@@ -148,33 +133,64 @@ class OrderSerializer(serializers.ModelSerializer):
             "customer",
             "coupon",
             "payment_id",
-            "payment_type",
             "payment_status",
+            "order_status",
             "total_price",
             "created_at",
             "updated_at",
+            "created_at"
         ]
+
+    def validate(self, attrs):
+        if attrs.get("payment_type", None) == "card" and not attrs.get("card_information", None):
+            raise ValidationError("Card information is required for card payment type.")
+        return attrs
 
     def get_subtotal_price(self, obj):
         return sum(item.quantity * item.price for item in obj.items.all())
+
+    def get_tax_percent(self, obj):
+        return Decimal(20)
+
+    def get_shipping_rate(self, obj):
+        return 20
 
     def get_discount(self, obj):
         if obj.coupon:
             return obj.coupon.discount
 
     def get_total_price(self, obj):
-        discount = self.get_discount(obj)
+        discount = self.get_discount(obj) if obj.coupon else 0
         subtotal_price = self.get_subtotal_price(obj)
-        if discount:
-            return subtotal_price - (subtotal_price * Decimal(discount / 100))
+        tax = self.get_tax_percent(obj)
+        shipping_rate = self.get_shipping_rate(obj)
+
+        subtotal_price -= (subtotal_price * Decimal(discount / 100))
+        subtotal_price -= (subtotal_price * Decimal(tax / 100))
+        subtotal_price -= shipping_rate
+
         return subtotal_price
 
     def create(self, validated_data):
-        card_information = validated_data.pop("card_information", None)
+        validated_data.pop("card_information", None)
         order = Order.objects.create(**validated_data)
         return order
 
     def update(self, instance, validated_data):
-        card_information = validated_data.pop("card_information", None)
+        validated_data.pop("card_information", None)
         instance = super().update(instance, validated_data)
         return instance
+
+
+class DashboardStatisticSerializer(serializers.Serializer):
+    total_orders = serializers.IntegerField()
+    active_orders = serializers.IntegerField()
+    completed_orders = serializers.IntegerField()
+    returned_orders = serializers.IntegerField()
+    total_orders_growth = serializers.FloatField()
+    active_orders_growth = serializers.FloatField()
+    completed_orders_growth = serializers.FloatField()
+    returned_orders_growth = serializers.FloatField()
+
+    def create(self, validated_data):
+        return DashboardStatistic(**validated_data)

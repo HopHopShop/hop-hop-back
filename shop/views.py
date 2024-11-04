@@ -1,3 +1,4 @@
+from django.db.models import Min, Max
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, OpenApiParameter, extend_schema_view
 from rest_framework import viewsets, status
@@ -15,7 +16,7 @@ from shop.serializers import (
     ProductDetailSerializer,
     CategoryImageSerializer,
     ProductCreateUpdateSerializer,
-    ProductImageUploadSerializer,
+    ProductImageUploadSerializer, ChangeImageOrderingSerializer,
 )
 from utils.pagination import Pagination
 from utils.permissions import IsAdminUserOrReadOnly
@@ -37,10 +38,10 @@ class ListCategories(ListAPIView):
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     pagination_class = Pagination
-    filter_backends = [DjangoFilterBackend,]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    ordering_fields = ["id"]
     filterset_class = CategoryFilter
     permission_classes = (IsAdminUserOrReadOnly,)
-    filterset_class = CategoryFilter
 
     def get_serializer_class(self):
         if self.action == "upload_image":
@@ -54,6 +55,12 @@ class CategoryViewSet(viewsets.ModelViewSet):
             OpenApiParameter(
                 name="name",
                 description="Search by category name.",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="ordering",
+                description="Ordering by ID (id - for ascending order, -id for descending)",
                 required=False,
                 type=str,
             )
@@ -115,30 +122,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@extend_schema_view(
-    list=extend_schema(
-        parameters=[
-            OpenApiParameter(
-                name="category",
-                description="Specify the category slug to filter the products.",
-                required=False,
-                type=str,
-            ),
-            OpenApiParameter(
-                name="name",
-                description="Search by product name",
-                required=False,
-                type=str,
-            ),
-            OpenApiParameter(
-                name="ordering",
-                description="Sort by fields: 'views' (popular product ), 'price'. Use '-' for short order.",
-                required=False,
-                type=str,
-            ),
-        ],
-    ),
-)
 @extend_schema(tags=["products"])
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.select_related("category").all()
@@ -146,7 +129,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     pagination_class = Pagination
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_class = ProductFilter
-    ordering_fields = ["views", "price"]
+    ordering_fields = ["views", "price", "id"]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_serializer_class(self):
@@ -158,15 +141,18 @@ class ProductViewSet(viewsets.ModelViewSet):
             return ProductCreateUpdateSerializer
         elif self.action == "upload_images":
             return ProductImageUploadSerializer
+        elif self.action == "change_ordering":
+            return ChangeImageOrderingSerializer
         return ProductSerializer
 
     @extend_schema(
         summary="Retrieve a list of products",
-        description="This endpoint returns a list of products. You can filter by category slug and product name, and sort by fields such as 'views' or 'price'.",
+        description="This endpoint returns a list of products. You can filter by category slug and product name, "
+                    "and sort by fields such as 'views', 'price', 'id'.",
         parameters=[
             OpenApiParameter(
                 name="category",
-                description="Specify the category slug to filter the products.",
+                description="Specify the category id to filter the products.",
                 required=False,
                 type=str,
             ),
@@ -177,15 +163,34 @@ class ProductViewSet(viewsets.ModelViewSet):
                 type=str,
             ),
             OpenApiParameter(
+                name="price_min",
+                description="Filter products within a price range. Select the start of the range.",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="price_max",
+                description="Filter products within a price range. Select the end of the range.",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
                 name="ordering",
-                description="Sort by fields: 'views' (popular product), 'price'. Use '-' for descending order.",
+                description="Sort by fields: 'views' (popular product), 'price', 'id'. Use '-' for descending order.",
                 required=False,
                 type=str,
             ),
         ],
     )
     def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
+        response = super().list(request, *args, **kwargs)
+
+        price_range = self.get_queryset().aggregate(min_price=Min('price'), max_price=Max('price'))
+
+        response.data['min_price'] = price_range['min_price']
+        response.data['max_price'] = price_range['max_price']
+
+        return response
 
     @extend_schema(
         summary="Create a new product",
@@ -251,8 +256,9 @@ class ProductViewSet(viewsets.ModelViewSet):
     )
     def upload_images(self, request, pk=None):
         product = self.get_object()
+
         serializer = ProductImageUploadSerializer(
-            data=request.data, context={"product": product}
+            instance=product, data=request.data, context={"product": product}
         )
 
         if serializer.is_valid():
@@ -280,6 +286,31 @@ class ProductViewSet(viewsets.ModelViewSet):
             return Response(
                 {"detail": "Image not found."}, status=status.HTTP_404_NOT_FOUND
             )
+
+    @extend_schema(
+        summary="Change the order of product images",
+        description="This endpoint allows changing the order of a product's images by passing an ordered list of image IDs."
+    )
+    @action(
+        methods=["POST"],
+        detail=True,
+        url_path="change-ordering",
+        permission_classes=[IsAdminUser],
+    )
+    def change_ordering(self, request, pk=None):
+        product = self.get_object()
+        serializer = ChangeImageOrderingSerializer(data=request.data, context=product)
+
+        serializer.is_valid(raise_exception=True)
+
+        image_ids = serializer.validated_data.get("image_ids")
+
+        for order, image_id in enumerate(image_ids):
+            ProductImage.objects.filter(id=image_id, product=product).update(order=order)
+
+        return Response({"detail": "Image ordering updated successfully"}, status=status.HTTP_200_OK)
+
+
 
     @extend_schema(
         summary="Update a product image",

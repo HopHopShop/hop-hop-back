@@ -12,7 +12,7 @@ from authentication.views import (
 
 router = routers.DefaultRouter()
 router.register(r"customers", CustomersListView, basename="customers")
-router.register(r"profile", ProfileOrder, basename="profile-order")
+router.register(r"profile-orders", ProfileOrder, basename="profile-order")
 
 
 app_name: str = "authentication"

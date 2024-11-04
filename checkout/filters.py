@@ -4,7 +4,7 @@ from checkout.models import Order
 
 
 class OrderFilter(django_filters.FilterSet):
-    id = django_filters.NumberFilter(field_name="id")
+    id = django_filters.CharFilter(field_name="id", lookup_expr="icontains")
 
     class Meta:
         model = Order

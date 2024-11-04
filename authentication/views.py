@@ -3,7 +3,7 @@ from django.contrib.auth import authenticate
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework import generics, viewsets
 from rest_framework import status
-from rest_framework.filters import SearchFilter
+from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -17,7 +17,7 @@ from authentication.serializers import (
     ResetPasswordSerializer, ResetPasswordRequestSerializer, RegistrationSerializer,
 )
 from checkout.models import Order
-from checkout.serializers import OrderSerializer
+from checkout.serializers import OrderSerializer, OrderListSerializer
 from utils.custom_exceptions import InvalidCredentialsError
 from utils.pagination import Pagination
 
@@ -139,7 +139,8 @@ class CustomersListView(viewsets.ModelViewSet):
     queryset = Customer.objects.all()
     pagination_class = Pagination
     permission_classes = (IsAdminUser,)
-    filter_backends = [SearchFilter, ]
+    filter_backends = [SearchFilter, OrderingFilter]
+    ordering_fields = ['id']
     search_fields = ['first_name', 'email']
     http_method_names = ["get", "patch"]
 
@@ -150,6 +151,12 @@ class CustomersListView(viewsets.ModelViewSet):
             OpenApiParameter(
                 name="search",
                 description="Search by name and/or surname",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="ordering",
+                description="Ordering by ID (id - for ascending order, -id for descending)",
                 required=False,
                 type=str,
             )
@@ -229,6 +236,7 @@ class LogoutView(APIView):
             raise ValueError
 
 
+@extend_schema(tags=["customer data"])
 class ProfileOrder(viewsets.ReadOnlyModelViewSet):
     """
     API view for retrieving orders that belong to the authenticated user
@@ -236,6 +244,11 @@ class ProfileOrder(viewsets.ReadOnlyModelViewSet):
     permission_classes = (IsAuthenticated,)
     pagination_class = Pagination
     serializer_class = OrderSerializer
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return OrderListSerializer
+        return OrderSerializer
 
     def get_queryset(self):
         return Order.objects.filter(customer=self.request.user).select_related("customer")

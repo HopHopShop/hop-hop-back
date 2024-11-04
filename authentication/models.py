@@ -1,5 +1,4 @@
 import os
-
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils import timezone
@@ -8,6 +7,7 @@ from django.utils.translation import gettext_lazy as _
 from datetime import timedelta
 
 from authentication.managers import UserManager
+from utils.data_validation import validate_phone_number
 
 
 def customer_image_file_path(instance, filename):
@@ -20,7 +20,13 @@ def customer_image_file_path(instance, filename):
 class Customer(AbstractUser):
     username = None
     email = models.EmailField(_("email address"), unique=True)
-    phone_number = models.CharField(_("phone number"), max_length=17, blank=True, unique=True)
+    phone_number = models.CharField(
+        _("phone number"),
+        max_length=17,
+        null=True,
+        unique=True,
+        validators=[validate_phone_number],
+    )
     avatar = models.ImageField(
         null=True,
         blank=True,

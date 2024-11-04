@@ -37,11 +37,11 @@ class Category(models.Model):
 
 
 class Product(models.Model):
-    name = models.CharField(max_length=100, db_index=True)
+    name = models.CharField(max_length=100, db_index=True, unique=True)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True)
     slug = models.SlugField(max_length=255, unique=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
-    SKU = models.IntegerField(unique=True, db_index=True)
+    SKU = models.CharField(max_length=100)
     description = models.TextField()
     views = models.IntegerField(default=0)
 
@@ -51,6 +51,8 @@ class Product(models.Model):
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.name)
+        if not self.SKU:
+            self.SKU = slugify(self.name)
         return super().save(*args, **kwargs)
 
     class Meta:
@@ -70,12 +72,13 @@ class ProductImage(models.Model):
     product = models.ForeignKey(
         Product, on_delete=models.CASCADE, related_name="product_images"
     )
+    order = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return f"Image for {self.product.name}"
 
     class Meta:
-        ordering = ["-id"]
+        ordering = ["order", "-id"]
         app_label = "shop"
 
 

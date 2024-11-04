@@ -1,8 +1,11 @@
+import re
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils import timezone
 
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 
 from authentication.models import PasswordReset
 from authentication.utils import send_reset_password_email
@@ -20,8 +23,7 @@ class LoginSerializer(serializers.Serializer):
 
 
 class RegistrationSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=6)
-    password2 = serializers.CharField(write_only=True, min_length=6)
+    password = serializers.CharField(write_only=True, min_length=8, max_length=256)
 
     class Meta:
         model = get_user_model()
@@ -31,16 +33,28 @@ class RegistrationSerializer(serializers.ModelSerializer):
             "last_name",
             "phone_number",
             "password",
-            "password2",
         )
 
-    def validate(self, attrs):
-        password = attrs.get("password", None)
-        password2 = attrs.pop("password2", None)
+        write_only_fields = ("password",)
 
-        validate_password_confirm(password, password2)
+    @staticmethod
+    def validate_password(value):
+        """
+        Ensure that the password contains at least:
+        - 1 uppercase letter
+        - 1 special character
+        - 1 number
+        """
+        if not re.search(r'[A-Z]', value):
+            raise ValidationError("Password must contain at least 1 uppercase letter.")
 
-        return attrs
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', value):
+            raise ValidationError("Password must contain at least 1 special character.")
+
+        if not re.search(r'\d', value):
+            raise ValidationError("Password must contain at least 1 number.")
+
+        return value
 
     def create(self, validated_data):
         return get_user_model().objects.create_user(**validated_data)
@@ -48,9 +62,8 @@ class RegistrationSerializer(serializers.ModelSerializer):
 
 class CustomerSerializer(serializers.ModelSerializer):
     user_role = serializers.SerializerMethodField()
-    old_password = serializers.CharField(write_only=True)
-    password = serializers.CharField(write_only=True)
-    password2 = serializers.CharField(write_only=True)
+    old_password = serializers.CharField(write_only=True, min_length=8, max_length=256)
+    password = serializers.CharField(write_only=True, min_length=8, max_length=256)
 
     def get_user_role(self, obj) -> str:
         if obj.is_superuser:
@@ -74,7 +87,6 @@ class CustomerSerializer(serializers.ModelSerializer):
             "shipping_postcode",
             "old_password",
             "password",
-            "password2",
             "user_role",
         )
         read_only_fields = ["id", "user_role"]
@@ -82,18 +94,14 @@ class CustomerSerializer(serializers.ModelSerializer):
 
     def validate_password_change(self, attrs):
         old_password = attrs.pop("old_password", None)
-        password = attrs.get("password", None)
-        password2 = attrs.pop("password2", None)
 
         if not old_password:
             raise serializers.ValidationError("Missing old password")
         elif not self.instance.check_password(old_password):
             raise serializers.ValidationError("Incorrect old password")
 
-        if not password or not password2:
-            raise serializers.ValidationError("Missing password or/and password2")
-        else:
-            validate_password_confirm(password, password2)
+        if not attrs.get("password", None):
+            raise serializers.ValidationError("Missing password")
 
         return attrs
 
@@ -104,7 +112,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             if not isinstance(v, str) or (isinstance(v, str) and v != "")
         }
 
-        if "old_password" in filtered_attrs or "password" in filtered_attrs or "password2" in filtered_attrs:
+        if "old_password" in filtered_attrs or "password" in filtered_attrs:
             filtered_attrs = self.validate_password_change(filtered_attrs)
 
         return filtered_attrs
@@ -172,6 +180,9 @@ class ResetPasswordRequestSerializer(serializers.ModelSerializer):
         user = get_user_model().objects.filter(email__iexact=attrs["email"]).first()
         if not user:
             raise serializers.ValidationError("There is no user with provided email")
+
+        if not user.is_active:
+            raise ValidationError("Your account is banned, please contact the administration.")
 
         token_generator = PasswordResetTokenGenerator()
         token = token_generator.make_token(user)
