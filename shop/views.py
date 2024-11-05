@@ -1,6 +1,6 @@
 from django.db.models import Min, Max
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import extend_schema, OpenApiParameter, extend_schema_view
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter
@@ -16,7 +16,7 @@ from shop.serializers import (
     ProductDetailSerializer,
     CategoryImageSerializer,
     ProductCreateUpdateSerializer,
-    ProductImageUploadSerializer, ChangeImageOrderingSerializer,
+    ProductImageUploadSerializer, ChangeImageOrderingSerializer
 )
 from utils.pagination import Pagination
 from utils.permissions import IsAdminUserOrReadOnly
@@ -249,16 +249,17 @@ class ProductViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(
-        methods=["POST", "PATCH"],
+        methods=["POST"],
         detail=True,
         url_path="upload-images",
         permission_classes=[IsAdminUser],
     )
     def upload_images(self, request, pk=None):
         product = self.get_object()
+        serializer_class = self.get_serializer_class()
 
-        serializer = ProductImageUploadSerializer(
-            instance=product, data=request.data, context={"product": product}
+        serializer = serializer_class(
+            data=request.data, context={"product": product}
         )
 
         if serializer.is_valid():
@@ -303,10 +304,10 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         serializer.is_valid(raise_exception=True)
 
-        image_ids = serializer.validated_data.get("image_ids")
+        frontend_ids = serializer.validated_data.get("frontend_ids")
 
-        for order, image_id in enumerate(image_ids):
-            ProductImage.objects.filter(id=image_id, product=product).update(order=order)
+        for order, frontend_id in enumerate(frontend_ids):
+            ProductImage.objects.filter(frontend_id=frontend_id, product=product).update(order=order)
 
         return Response({"detail": "Image ordering updated successfully"}, status=status.HTTP_200_OK)
 
