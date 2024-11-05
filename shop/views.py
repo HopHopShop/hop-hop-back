@@ -304,13 +304,10 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         serializer.is_valid(raise_exception=True)
 
-        ordering_ids = serializer.validated_data.get("ordering_ids")
-        images_list = list(ProductImage.objects.filter(product=product))
+        frontend_ids = serializer.validated_data.get("frontend_ids")
 
-        for image, ordering_id in zip(images_list, ordering_ids):
-            image.order = ordering_id
-
-        ProductImage.objects.bulk_update(images_list, ['order'])
+        for order, frontend_id in enumerate(frontend_ids):
+            ProductImage.objects.filter(frontend_id=frontend_id, product=product).update(order=order)
 
         return Response({"detail": "Image ordering updated successfully"}, status=status.HTTP_200_OK)
 

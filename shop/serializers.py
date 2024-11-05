@@ -20,6 +20,7 @@ class ProductImageSerializer(serializers.ModelSerializer):
         model = ProductImage
         fields = (
             "id",
+            "frontend_id",
             "image",
             "order"
         )
@@ -49,44 +50,52 @@ class ProductImageUploadSerializer(serializers.Serializer):
         ),
         write_only=True,
     )
-    images_order = serializers.ListField(
+    frontend_ids = serializers.ListField(
         child=serializers.CharField(),
         allow_empty=True,
         help_text="An ordered list of image frontend IDs to reorder"
     )
 
     def validate(self, attrs):
-        images_order = attrs.get("images_order")[0].split(',')
-        if len(images_order) != len(attrs["uploaded_images"]):
+        frontend_ids = attrs.get("frontend_ids")[0].split(',')
+        if len(frontend_ids) != len(attrs["uploaded_images"]):
             raise serializers.ValidationError("Ordering IDs list do not match uploaded images list.")
 
         return attrs
 
     def create(self, validated_data):
         images_list = validated_data["uploaded_images"]
-        ordering_list = validated_data["images_order"][0].split(',')
+        frontend_ids = validated_data["frontend_ids"][0].split(',')
 
         product = self.context["product"]
+        product_images = ProductImage.objects.filter(product=product)
 
-        product_images = []
-        for image, order in zip(images_list, ordering_list):
-            product_image = ProductImage(product=product, image=image, order=int(order))
-            product_images.append(product_image)
+        if not product_images:
+            product_images = []
+            for i, image, fr_id in zip(range(len(images_list)), images_list, frontend_ids):
+                product_image = ProductImage(product=product, image=image, order=i, frontend_id=fr_id)
+                product_images.append(product_image)
+        else:
+            last_order_value = list(product_images)[-1].order
+            product_images = []
+            for i, image, fr_id in zip(range(len(images_list)), images_list, frontend_ids):
+                product_image = ProductImage(product=product, image=image, order=i+last_order_value+1, frontend_id=fr_id)
+                product_images.append(product_image)
 
         ProductImage.objects.bulk_create(product_images)
         return product_images
 
 
 class ChangeImageOrderingSerializer(serializers.Serializer):
-    ordering_ids = serializers.ListField(
-        child=serializers.IntegerField(),
-        allow_empty=False,
-        help_text="An ordered list of image IDs to reorder"
+    frontend_ids = serializers.ListField(
+        child=serializers.CharField(),
+        allow_empty=True,
+        help_text="An ordered list of image frontend IDs to reorder"
     )
 
-    def validate_image_ids(self, value):
+    def validate_frontend_ids(self, value):
         product = self.context
-        product_ordering_ids = product.product_images.values_list("order", flat=True)
+        product_ordering_ids = product.product_images.values_list("frontend_id", flat=True)
 
         if set(value) != set(product_ordering_ids):
             raise serializers.ValidationError("Invalid image ordering IDs provided.")
