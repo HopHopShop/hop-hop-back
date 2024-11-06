@@ -6,6 +6,8 @@ from django.utils.translation import gettext_lazy as _
 
 from datetime import timedelta
 
+from rest_framework_simplejwt.tokens import RefreshToken
+
 from authentication.managers import UserManager
 from utils.data_validation import validate_phone_number
 
@@ -39,6 +41,8 @@ class Customer(AbstractUser):
     shipping_address = models.CharField(max_length=255, null=True, blank=True)
     shipping_postcode = models.CharField(max_length=20, null=True, blank=True)
 
+    is_verified = models.BooleanField(default=False)
+
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
 
@@ -51,6 +55,13 @@ class Customer(AbstractUser):
         verbose_name = _("user")
         verbose_name_plural = _("users")
         ordering = ["id"]
+
+    def tokens(self):
+        refresh = RefreshToken.for_user(self)
+        return ({
+            'refresh': str(refresh),
+            'refresh': str(refresh.access_token),
+        })
 
 
 class PasswordReset(models.Model):
