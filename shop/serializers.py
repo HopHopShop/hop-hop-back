@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from shop.models import Category, Product, ProductAttributes, ProductImage
+from utils.repeatable_functions import convert_price
 
 
 class CategoryImageSerializer(serializers.ModelSerializer):
@@ -122,9 +123,7 @@ class ProductSerializer(serializers.ModelSerializer):
         read_only_fields = ["slug"]
 
     def get_price(self, obj):
-        if obj.price % 1 == 0:
-            return str(int(obj.price))
-        return str(obj.price)
+        return convert_price(obj.price)
 
     def get_images(self, obj):
         first_image = obj.product_images.first()
@@ -155,9 +154,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_price(self, obj):
-        if obj.price % 1 == 0:
-            return str(int(obj.price))
-        return str(obj.price)
+        return convert_price(obj.price)
 
 
 class ProductCreateUpdateSerializer(serializers.ModelSerializer):
