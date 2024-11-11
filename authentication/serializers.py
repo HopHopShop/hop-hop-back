@@ -62,8 +62,8 @@ class RegistrationSerializer(serializers.ModelSerializer):
 
 class CustomerSerializer(serializers.ModelSerializer):
     user_role = serializers.SerializerMethodField()
-    old_password = serializers.CharField(write_only=True, min_length=8, max_length=256)
-    password = serializers.CharField(write_only=True, min_length=8, max_length=256)
+    old_password = serializers.CharField(write_only=True, min_length=8, max_length=256, allow_blank=True)
+    password = serializers.CharField(write_only=True, min_length=8, max_length=256, allow_blank=True)
 
     def get_user_role(self, obj) -> str:
         if obj.is_superuser:
