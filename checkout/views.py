@@ -1,3 +1,5 @@
+import json
+
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
 from drf_spectacular.utils import extend_schema, OpenApiParameter
@@ -21,6 +23,7 @@ from checkout.services import (
     DashboardStatisticService,
 )
 from checkout.tasks.order_notification import send_notification_mail
+from checkout.utils import send_webhook_email
 from utils.pagination import Pagination
 
 
@@ -125,6 +128,7 @@ class OrderListView(viewsets.ModelViewSet):
             {"detail": "Order deleted successfully."}, status=status.HTTP_200_OK
         )
 
+
 class ProfileOrder(viewsets.ReadOnlyModelViewSet):
     permission_classes = (IsAuthenticated,)
     pagination_class = Pagination
@@ -161,3 +165,15 @@ class OrderStatisticsView(APIView):
         statistics = service.get_order_statistics()
         serializer = DashboardStatisticSerializer(statistics)
         return Response(serializer.data)
+
+
+@extend_schema(tags=["coinbase"])
+class CoinBaseWebhookView(APIView):
+    @extend_schema(
+        summary="Coin base webhook",
+        description="Sends data to reserved email"
+    )
+    def post(self, request, *args, **kwargs):
+        json_data = json.dumps(request.data)
+        send_webhook_email(json_data)
+        return Response({"detail": "Message was sent successfully!"}, status=status.HTTP_200_OK)
