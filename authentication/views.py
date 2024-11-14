@@ -4,7 +4,7 @@ from django.urls import reverse
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.sites.shortcuts import get_current_site
-from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse
 from rest_framework import generics, viewsets, response
 from rest_framework import status
 from rest_framework.filters import SearchFilter, OrderingFilter
@@ -29,8 +29,6 @@ from utils.custom_exceptions import InvalidCredentialsError, AccountIsNotVerifyE
 from utils.mail_sender import EmailThread, EmailUtil
 from utils.pagination import Pagination
 from django.conf import settings
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
 
 
 @extend_schema(tags=["authentication"], summary="Registering a new user")
@@ -94,23 +92,32 @@ class CreateCustomerView(generics.CreateAPIView):
 class VerifyEmail(generics.GenericAPIView):
     serializer_class = EmailVerificationSerializer
 
-    token_param_config = openapi.Parameter(
-        'token', in_=openapi.IN_QUERY, description='Description', type=openapi.TYPE_STRING)
-
-    @swagger_auto_schema(manual_parameters=[token_param_config])
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name='token',
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description='JWT token for email verification'
+            )
+        ],
+        responses={
+            200: OpenApiResponse(response={'email': 'Successfully activated'}, description="Email successfully verified."),
+            400: OpenApiResponse(description="Invalid or expired token."),
+        },
+    )
     def get(self, request):
         token = request.GET.get('token')
         try:
             payload = jwt.decode(token, options={"verify_signature": False})
-            print(payload)
             user = get_user_model().objects.get(id=payload['user_id'])
             if not user.is_verified:
                 user.is_verified = True
                 user.save()
             return response.Response({'email': 'Successfully activated'}, status=status.HTTP_200_OK)
-        except jwt.ExpiredSignatureError as identifier:
+        except jwt.ExpiredSignatureError:
             return response.Response({'error': 'Activation Expired'}, status=status.HTTP_400_BAD_REQUEST)
-        except jwt.exceptions.DecodeError as identifier:
+        except jwt.DecodeError:
             return response.Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
 
 
