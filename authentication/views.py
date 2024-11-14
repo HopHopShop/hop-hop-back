@@ -1,7 +1,11 @@
+import jwt
+from django.urls import reverse
+
 from django.conf import settings
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate, get_user_model
+from django.contrib.sites.shortcuts import get_current_site
 from drf_spectacular.utils import extend_schema, OpenApiParameter
-from rest_framework import generics, viewsets
+from rest_framework import generics, viewsets, response
 from rest_framework import status
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
@@ -9,17 +13,24 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
+from stripe import Account
 
 from authentication.models import Customer
 from authentication.serializers import (
     CustomerSerializer,
     LoginSerializer, CustomerAdminSerializer,
-    ResetPasswordSerializer, ResetPasswordRequestSerializer, RegistrationSerializer,
+    ResetPasswordSerializer, ResetPasswordRequestSerializer, RegistrationSerializer, EmailVerificationSerializer,
 )
 from checkout.models import Order
 from checkout.serializers import OrderSerializer, OrderListSerializer
 from utils.custom_exceptions import InvalidCredentialsError
+from checkout.serializers import OrderSerializer
+from utils.custom_exceptions import InvalidCredentialsError, AccountIsNotVerifyError
+from utils.mail_sender import EmailThread, EmailUtil
 from utils.pagination import Pagination
+from django.conf import settings
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 
 
 @extend_schema(tags=["authentication"], summary="Registering a new user")
@@ -52,6 +63,19 @@ class CreateCustomerView(generics.CreateAPIView):
             refresh = RefreshToken.for_user(user)
             response = Response(status=status.HTTP_201_CREATED)
 
+            user_email = get_user_model().objects.get(email=user.email)
+            tokens = RefreshToken.for_user(user_email).access_token
+
+            current_site = get_current_site(request).domain
+            relative_link = reverse('authentication:email-verify')
+            absurl = 'http://' + current_site + relative_link + "?token=" + str(tokens)
+            email_body = 'Hi ' + user.first_name + \
+                         ' Use the link below to verify your email \n' + absurl
+            data = {'email_body': email_body, 'to_email': user.email,
+                    'email_subject': 'Verify your email'}
+
+            EmailUtil.send_email(data=data)
+
             response.data = {
                 "user": CustomerSerializer(user).data,
                 "access_token": {
@@ -65,6 +89,29 @@ class CreateCustomerView(generics.CreateAPIView):
             }
 
             return response
+
+
+class VerifyEmail(generics.GenericAPIView):
+    serializer_class = EmailVerificationSerializer
+
+    token_param_config = openapi.Parameter(
+        'token', in_=openapi.IN_QUERY, description='Description', type=openapi.TYPE_STRING)
+
+    @swagger_auto_schema(manual_parameters=[token_param_config])
+    def get(self, request):
+        token = request.GET.get('token')
+        try:
+            payload = jwt.decode(token, options={"verify_signature": False})
+            print(payload)
+            user = get_user_model().objects.get(id=payload['user_id'])
+            if not user.is_verified:
+                user.is_verified = True
+                user.save()
+            return response.Response({'email': 'Successfully activated'}, status=status.HTTP_200_OK)
+        except jwt.ExpiredSignatureError as identifier:
+            return response.Response({'error': 'Activation Expired'}, status=status.HTTP_400_BAD_REQUEST)
+        except jwt.exceptions.DecodeError as identifier:
+            return response.Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @extend_schema(tags=["authentication"], summary="Log in to an existing account")
@@ -99,21 +146,24 @@ class LoginView(APIView):
         user = authenticate(email=email, password=password)
 
         if user is not None:
-            refresh = RefreshToken.for_user(user)
-            response = Response()
+            if user.is_verified:
+                refresh = RefreshToken.for_user(user)
+                response = Response()
 
-            response.data = {
-                "user": CustomerSerializer(user).data,
-                "access_token": {
-                    "value": str(refresh.access_token),
-                    "expires": settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds(),
-                },
-                "refresh_token": {
-                    "value": str(refresh),
-                    "expires": settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds(),
-                },
-            }
-            return response
+                response.data = {
+                    "user": CustomerSerializer(user).data,
+                    "access_token": {
+                        "value": str(refresh.access_token),
+                        "expires": settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds(),
+                    },
+                    "refresh_token": {
+                        "value": str(refresh),
+                        "expires": settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds(),
+                    },
+                }
+                return response
+            else:
+                raise AccountIsNotVerifyError
         raise InvalidCredentialsError
 
 
