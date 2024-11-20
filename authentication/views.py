@@ -153,24 +153,21 @@ class LoginView(APIView):
         user = authenticate(email=email, password=password)
 
         if user is not None:
-            if user.is_verified:
-                refresh = RefreshToken.for_user(user)
-                response = Response()
+            refresh = RefreshToken.for_user(user)
+            response = Response()
 
-                response.data = {
-                    "user": CustomerSerializer(user).data,
-                    "access_token": {
-                        "value": str(refresh.access_token),
-                        "expires": settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds(),
-                    },
-                    "refresh_token": {
-                        "value": str(refresh),
-                        "expires": settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds(),
-                    },
-                }
-                return response
-            else:
-                raise AccountIsNotVerifyError
+            response.data = {
+                "user": CustomerSerializer(user).data,
+                "access_token": {
+                    "value": str(refresh.access_token),
+                    "expires": settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds(),
+                },
+                "refresh_token": {
+                    "value": str(refresh),
+                    "expires": settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds(),
+                },
+            }
+            return response
         raise InvalidCredentialsError
 
 
