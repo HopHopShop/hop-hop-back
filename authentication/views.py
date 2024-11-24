@@ -1,3 +1,5 @@
+import os
+
 import jwt
 from django.urls import reverse
 
@@ -21,6 +23,7 @@ from authentication.serializers import (
     LoginSerializer, CustomerAdminSerializer,
     ResetPasswordSerializer, ResetPasswordRequestSerializer, RegistrationSerializer, EmailVerificationSerializer,
 )
+from authentication.utils import send_email_verification_url
 from checkout.models import Order
 from checkout.serializers import OrderSerializer, OrderListSerializer
 from utils.custom_exceptions import InvalidCredentialsError
@@ -61,18 +64,9 @@ class CreateCustomerView(generics.CreateAPIView):
             refresh = RefreshToken.for_user(user)
             response = Response(status=status.HTTP_201_CREATED)
 
-            user_email = get_user_model().objects.get(email=user.email)
-            tokens = RefreshToken.for_user(user_email).access_token
+            token = RefreshToken.for_user(user).access_token
 
-            current_site = get_current_site(request).domain
-            relative_link = reverse('authentication:email-verify')
-            absurl = 'http://' + current_site + relative_link + "?token=" + str(tokens)
-            email_body = 'Hi ' + user.first_name + \
-                         ' Use the link below to verify your email \n' + absurl
-            data = {'email_body': email_body, 'to_email': user.email,
-                    'email_subject': 'Verify your email'}
-
-            EmailUtil.send_email(data=data)
+            send_email_verification_url(user, token)
 
             response.data = {
                 "user": CustomerSerializer(user).data,
@@ -102,7 +96,7 @@ class VerifyEmail(generics.GenericAPIView):
             )
         ],
         responses={
-            200: OpenApiResponse(response={'email': 'Successfully activated'}, description="Email successfully verified."),
+            200: OpenApiResponse(description="Email successfully verified."),
             400: OpenApiResponse(description="Invalid or expired token."),
         },
     )
