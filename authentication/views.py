@@ -1,11 +1,6 @@
-import os
-
 import jwt
-from django.urls import reverse
 
-from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
-from django.contrib.sites.shortcuts import get_current_site
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse
 from rest_framework import generics, viewsets, response
 from rest_framework import status
@@ -15,7 +10,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
-from stripe import Account
 
 from authentication.models import Customer
 from authentication.serializers import (
@@ -25,11 +19,9 @@ from authentication.serializers import (
 )
 from authentication.utils import send_email_verification_url
 from checkout.models import Order
-from checkout.serializers import OrderSerializer, OrderListSerializer
-from utils.custom_exceptions import InvalidCredentialsError
+from checkout.serializers import OrderListSerializer
 from checkout.serializers import OrderSerializer
 from utils.custom_exceptions import InvalidCredentialsError, AccountIsNotVerifyError
-from utils.mail_sender import EmailThread, EmailUtil
 from utils.pagination import Pagination
 from django.conf import settings
 
@@ -164,6 +156,16 @@ class LoginView(APIView):
             }
             return response
         raise InvalidCredentialsError
+
+
+@extend_schema(tags=["authentication"])
+class CustomTokenRefreshView(TokenRefreshView):
+    """
+    API view to refresh JWT tokens using refresh token from body
+    """
+
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
 
 
 @extend_schema(tags=["customer data"], summary="Get all customers")
