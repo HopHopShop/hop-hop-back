@@ -83,6 +83,7 @@ class CreateCustomerView(generics.CreateAPIView):
             return response
 
 
+@extend_schema(tags=["authentication"])
 class VerifyEmail(generics.GenericAPIView):
     serializer_class = EmailVerificationSerializer
 
@@ -165,18 +166,6 @@ class LoginView(APIView):
         raise InvalidCredentialsError
 
 
-@extend_schema(tags=["authentication"])
-class CustomTokenRefreshView(TokenRefreshView):
-    """
-    API view to refresh JWT tokens using refresh token from cookie
-    """
-
-    def post(self, request, *args, **kwargs):
-        refresh_token = request.COOKIES.get(settings.SIMPLE_JWT["AUTH_COOKIE"])
-        request.data["refresh"] = refresh_token
-        return super().post(request, *args, **kwargs)
-
-
 @extend_schema(tags=["customer data"], summary="Get all customers")
 class CustomersListView(viewsets.ModelViewSet):
     """
@@ -242,6 +231,7 @@ class CustomerProfileView(generics.RetrieveUpdateAPIView):
         return self.request.user
 
 
+@extend_schema(tags=["authentication"])
 class ResetPasswordView(APIView):
     serializer_class = ResetPasswordSerializer
 
@@ -253,6 +243,7 @@ class ResetPasswordView(APIView):
             return Response("Password was successfully changed", status=status.HTTP_200_OK)
 
 
+@extend_schema(tags=["authentication"])
 class PasswordResetRequestView(APIView):
     serializer_class = ResetPasswordRequestSerializer
 
@@ -300,4 +291,3 @@ class ProfileOrder(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         return Order.objects.filter(customer=self.request.user).select_related("customer")
-
