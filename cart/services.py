@@ -56,8 +56,9 @@ class CartService:
     def get_total_item(self) -> int:
         return self.service.get_total_item()
 
-    def get_session_id(self) -> int:
-        return self.request.session.session_key
+    def get_session_id(self) -> str:
+        if not self.request.user.is_authenticated:
+            return self.service.session.session_key
 
     def handle_empty_cart(self) -> None:
         if self.service.get_total_item() == 0:
@@ -84,6 +85,7 @@ class CartSessionService:
             cart = self.session[settings.CART_SESSION_ID] = {}
         self.cart = cart
         self.coupon_id = self.session.get("coupon_id")
+        self.session.save()
 
     def add(
             self, product: Product, quantity: int = 1, update_quantity: bool = False
