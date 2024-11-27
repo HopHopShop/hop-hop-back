@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from shop.models import Category, Product, ProductAttributes, ProductImage
-from utils.repeatable_functions import convert_price
 
 
 class CategoryImageSerializer(serializers.ModelSerializer):
@@ -21,10 +20,29 @@ class ProductImageSerializer(serializers.ModelSerializer):
         model = ProductImage
         fields = (
             "id",
-            "frontend_id",
             "image",
             "order"
         )
+
+
+class ChangeImageOrderingSerializer(serializers.Serializer):
+    image_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+        help_text="An ordered list of image IDs to reorder"
+    )
+
+    def validate_image_ids(self, value):
+        # Ensure that all IDs are valid and belong to the product
+        product = self.context
+        product_image_ids = product.product_images.values_list("id", flat=True)
+
+        print(product_image_ids)
+
+        if set(value) != set(product_image_ids):
+            raise serializers.ValidationError("Invalid image IDs provided.")
+
+        return value
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -51,57 +69,30 @@ class ProductImageUploadSerializer(serializers.Serializer):
         ),
         write_only=True,
     )
-    frontend_ids = serializers.ListField(
-        child=serializers.CharField(),
-        allow_empty=True,
-        help_text="An ordered list of image frontend IDs to reorder"
-    )
-
-    def validate(self, attrs):
-        frontend_ids = attrs.get("frontend_ids")[0].split(',')
-        if len(frontend_ids) != len(attrs["uploaded_images"]):
-            raise serializers.ValidationError("Ordering IDs list do not match uploaded images list.")
-
-        return attrs
 
     def create(self, validated_data):
-        images_list = validated_data["uploaded_images"]
-        frontend_ids = validated_data["frontend_ids"][0].split(',')
-
+        images = validated_data["uploaded_images"]
         product = self.context["product"]
-        product_images = ProductImage.objects.filter(product=product)
-
-        if not product_images:
-            product_images = []
-            for i, image, fr_id in zip(range(len(images_list)), images_list, frontend_ids):
-                product_image = ProductImage(product=product, image=image, order=i, frontend_id=fr_id)
-                product_images.append(product_image)
-        else:
-            last_order_value = list(product_images)[-1].order
-            product_images = []
-            for i, image, fr_id in zip(range(len(images_list)), images_list, frontend_ids):
-                product_image = ProductImage(product=product, image=image, order=i+last_order_value+1, frontend_id=fr_id)
-                product_images.append(product_image)
-
+        product_images = [
+            ProductImage(product=product, image=image) for image in images
+        ]
         ProductImage.objects.bulk_create(product_images)
         return product_images
 
+    def update(self, instance, validated_data):
+        instance.product_images.all().delete()
+        images = validated_data["uploaded_images"]
+        product_images = [
+            ProductImage(product=instance, image=image) for image in images
+        ]
+        ProductImage.objects.bulk_create(product_images)
+        return product_images
 
-class ChangeImageOrderingSerializer(serializers.Serializer):
-    frontend_ids = serializers.ListField(
-        child=serializers.CharField(),
-        allow_empty=True,
-        help_text="An ordered list of image frontend IDs to reorder"
-    )
-
-    def validate_frontend_ids(self, value):
-        product = self.context
-        product_ordering_ids = product.product_images.values_list("frontend_id", flat=True)
-
-        if set(value) != set(product_ordering_ids):
-            raise serializers.ValidationError("Invalid image ordering IDs provided.")
-
-        return value
+    class Meta:
+        model = ProductImage
+        fields = [
+            "image",
+        ]
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -123,7 +114,9 @@ class ProductSerializer(serializers.ModelSerializer):
         read_only_fields = ["slug"]
 
     def get_price(self, obj):
-        return convert_price(obj.price)
+        if obj.price % 1 == 0:
+            return str(int(obj.price))
+        return str(obj.price)
 
     def get_images(self, obj):
         first_image = obj.product_images.first()
@@ -154,7 +147,9 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_price(self, obj):
-        return convert_price(obj.price)
+        if obj.price % 1 == 0:
+            return str(int(obj.price))
+        return str(obj.price)
 
 
 class ProductCreateUpdateSerializer(serializers.ModelSerializer):

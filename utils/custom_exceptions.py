@@ -65,12 +65,6 @@ class InvalidCredentialsError(APIException):
     default_code = "invalid_credentials"
 
 
-class AccountIsNotVerifyError(APIException):
-    status_code = 403
-    default_detail = "Account is not verified."
-    default_code = "account_not_verify"
-
-
 class CartExceptionHandler(ExceptionHandler):
     def convert_known_exceptions(self, exc: Exception) -> Exception:
         if isinstance(exc, requests.Timeout):

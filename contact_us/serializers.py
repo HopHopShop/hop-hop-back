@@ -10,8 +10,3 @@ class ContactUsSerializer(serializers.ModelSerializer):
 
         read_only_fields = ('id',)
         write_only_fields = ('created_at',)
-
-
-class SendMessageSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-    message = serializers.CharField(max_length=None)

@@ -219,7 +219,6 @@ DRF_STANDARDIZED_ERRORS = {
         "utils.custom_exceptions.ProductNotExistException": "drf_standardized_errors.exceptions.BaseAPIException",
         "utils.custom_exceptions.CouponNotExistException": "drf_standardized_errors.exceptions.BaseAPIException",
         "utils.custom_exceptions.InvalidCredentialsError": "drf_standardized_errors.exceptions.BaseAPIException",
-        "utils.custom_exceptions.AccountIsNotVerifyError": "drf_standardized_errors.exceptions.BaseAPIException",
     },
 }
 

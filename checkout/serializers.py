@@ -7,7 +7,6 @@ from rest_framework.exceptions import ValidationError
 from checkout.models import Order, OrderItem
 from checkout.services import DashboardStatistic
 from shop.serializers import ProductSerializer
-from utils.repeatable_functions import convert_price
 
 
 class CardInformationSerializer(serializers.Serializer):
@@ -64,7 +63,6 @@ class CardInformationSerializer(serializers.Serializer):
 
 class OrderItemSerializer(serializers.ModelSerializer):
     product = ProductSerializer()
-    price = serializers.SerializerMethodField()
 
     class Meta:
         model = OrderItem
@@ -75,9 +73,6 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "price",
         ]
 
-    def get_price(self, obj):
-        return convert_price(obj.price)
-
 
 class OrderListSerializer(serializers.ModelSerializer):
     total_quantity = serializers.SerializerMethodField()
@@ -87,7 +82,7 @@ class OrderListSerializer(serializers.ModelSerializer):
         return sum(item.quantity for item in obj.items.all())
 
     def get_total_price(self, obj):
-        return convert_price(sum(item.price for item in obj.items.all()))
+        return sum(item.quantity * item.price for item in obj.items.all())
 
     class Meta:
         model = Order
@@ -152,8 +147,7 @@ class OrderSerializer(serializers.ModelSerializer):
         return attrs
 
     def get_subtotal_price(self, obj):
-        subtotal_price = sum(Decimal(item.price) for item in obj.items.all())
-        return convert_price(subtotal_price)
+        return sum(item.quantity * item.price for item in obj.items.all())
 
     def get_tax_percent(self, obj):
         return Decimal(20)
@@ -167,15 +161,15 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def get_total_price(self, obj):
         discount = self.get_discount(obj) if obj.coupon else 0
-        subtotal_price = Decimal(self.get_subtotal_price(obj))
+        subtotal_price = self.get_subtotal_price(obj)
         tax = self.get_tax_percent(obj)
         shipping_rate = self.get_shipping_rate(obj)
 
-        subtotal_price += (subtotal_price * Decimal(discount / 100))
-        subtotal_price += (subtotal_price * Decimal(tax / 100))
-        subtotal_price += shipping_rate
+        subtotal_price -= (subtotal_price * Decimal(discount / 100))
+        subtotal_price -= (subtotal_price * Decimal(tax / 100))
+        subtotal_price -= shipping_rate
 
-        return convert_price(subtotal_price)
+        return subtotal_price
 
     def create(self, validated_data):
         validated_data.pop("card_information", None)
