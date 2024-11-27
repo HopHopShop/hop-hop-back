@@ -1,7 +1,8 @@
-from django.conf import settings
-from django.contrib.auth import authenticate
-from drf_spectacular.utils import extend_schema, OpenApiParameter
-from rest_framework import generics, viewsets
+import jwt
+
+from django.contrib.auth import authenticate, get_user_model
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse
+from rest_framework import generics, viewsets, response
 from rest_framework import status
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
@@ -14,12 +15,15 @@ from authentication.models import Customer
 from authentication.serializers import (
     CustomerSerializer,
     LoginSerializer, CustomerAdminSerializer,
-    ResetPasswordSerializer, ResetPasswordRequestSerializer, RegistrationSerializer,
+    ResetPasswordSerializer, ResetPasswordRequestSerializer, RegistrationSerializer, EmailVerificationSerializer,
 )
+from authentication.utils import send_email_verification_url
 from checkout.models import Order
-from checkout.serializers import OrderSerializer, OrderListSerializer
-from utils.custom_exceptions import InvalidCredentialsError
+from checkout.serializers import OrderListSerializer
+from checkout.serializers import OrderSerializer
+from utils.custom_exceptions import InvalidCredentialsError, AccountIsNotVerifyError
 from utils.pagination import Pagination
+from django.conf import settings
 
 
 @extend_schema(tags=["authentication"], summary="Registering a new user")
@@ -52,6 +56,10 @@ class CreateCustomerView(generics.CreateAPIView):
             refresh = RefreshToken.for_user(user)
             response = Response(status=status.HTTP_201_CREATED)
 
+            token = RefreshToken.for_user(user).access_token
+
+            send_email_verification_url(user, token)
+
             response.data = {
                 "user": CustomerSerializer(user).data,
                 "access_token": {
@@ -65,6 +73,39 @@ class CreateCustomerView(generics.CreateAPIView):
             }
 
             return response
+
+
+@extend_schema(tags=["authentication"])
+class VerifyEmail(generics.GenericAPIView):
+    serializer_class = EmailVerificationSerializer
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name='token',
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description='JWT token for email verification'
+            )
+        ],
+        responses={
+            200: OpenApiResponse(description="Email successfully verified."),
+            400: OpenApiResponse(description="Invalid or expired token."),
+        },
+    )
+    def get(self, request):
+        token = request.GET.get('token')
+        try:
+            payload = jwt.decode(token, options={"verify_signature": False})
+            user = get_user_model().objects.get(id=payload['user_id'])
+            if not user.is_verified:
+                user.is_verified = True
+                user.save()
+            return response.Response({'email': 'Successfully activated'}, status=status.HTTP_200_OK)
+        except jwt.ExpiredSignatureError:
+            return response.Response({'error': 'Activation Expired'}, status=status.HTTP_400_BAD_REQUEST)
+        except jwt.DecodeError:
+            return response.Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @extend_schema(tags=["authentication"], summary="Log in to an existing account")
@@ -120,12 +161,10 @@ class LoginView(APIView):
 @extend_schema(tags=["authentication"])
 class CustomTokenRefreshView(TokenRefreshView):
     """
-    API view to refresh JWT tokens using refresh token from cookie
+    API view to refresh JWT tokens using refresh token from body
     """
 
     def post(self, request, *args, **kwargs):
-        refresh_token = request.COOKIES.get(settings.SIMPLE_JWT["AUTH_COOKIE"])
-        request.data["refresh"] = refresh_token
         return super().post(request, *args, **kwargs)
 
 
@@ -194,6 +233,7 @@ class CustomerProfileView(generics.RetrieveUpdateAPIView):
         return self.request.user
 
 
+@extend_schema(tags=["authentication"])
 class ResetPasswordView(APIView):
     serializer_class = ResetPasswordSerializer
 
@@ -205,6 +245,7 @@ class ResetPasswordView(APIView):
             return Response("Password was successfully changed", status=status.HTTP_200_OK)
 
 
+@extend_schema(tags=["authentication"])
 class PasswordResetRequestView(APIView):
     serializer_class = ResetPasswordRequestSerializer
 
@@ -215,25 +256,6 @@ class PasswordResetRequestView(APIView):
             password_reset_request_serializer.save()
 
             return Response("Recovery email was successfully sent", status=status.HTTP_200_OK)
-
-
-@extend_schema(tags=["authentication"])
-class LogoutView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        try:
-            refresh_token = request.data.get("refresh_token")
-            if refresh_token:
-                token = RefreshToken(refresh_token)
-                token.blacklist()
-            response = Response(
-                {"message": "Logout successful"}, status=status.HTTP_204_NO_CONTENT
-            )
-            response.delete_cookie("refresh_token")
-            return response
-        except Exception:
-            raise ValueError
 
 
 @extend_schema(tags=["customer data"])
@@ -252,4 +274,3 @@ class ProfileOrder(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         return Order.objects.filter(customer=self.request.user).select_related("customer")
-

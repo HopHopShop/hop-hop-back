@@ -24,6 +24,7 @@ from utils.custom_exceptions import (
     StripeAPIConnectionError,
     StripeGeneralError,
 )
+from utils.repeatable_functions import convert_price
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
@@ -84,7 +85,7 @@ class OrderService:
             {
                 "product": Product.objects.get(id=item["product"]["id"]),
                 "quantity": item["quantity"],
-                "price": item["price"] * item["quantity"],
+                "price": item["total_price"]
             }
             for item in self.cart_service
         ]

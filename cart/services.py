@@ -8,6 +8,7 @@ from rest_framework.exceptions import ValidationError
 from cart.models import Coupon, CartItem, Cart
 from shop.models import Product
 from shop.serializers import ProductSerializer
+from utils.repeatable_functions import convert_price
 
 
 class CartService:
@@ -49,14 +50,15 @@ class CartService:
     def coupon_is_used(self) -> bool:
         return self.service.coupon_is_used()
 
-    def get_total_price(self) -> Decimal:
-        return self.service.get_total_price()
+    def get_total_price(self) -> str:
+        return convert_price(self.service.get_total_price())
 
     def get_total_item(self) -> int:
         return self.service.get_total_item()
 
-    def get_session_id(self) -> int:
-        return self.request.session.session_key
+    def get_session_id(self) -> str:
+        if not self.request.user.is_authenticated:
+            return self.service.session.session_key
 
     def handle_empty_cart(self) -> None:
         if self.service.get_total_item() == 0:
@@ -83,6 +85,7 @@ class CartSessionService:
             cart = self.session[settings.CART_SESSION_ID] = {}
         self.cart = cart
         self.coupon_id = self.session.get("coupon_id")
+        self.session.save()
 
     def add(
             self, product: Product, quantity: int = 1, update_quantity: bool = False
@@ -139,13 +142,11 @@ class CartSessionService:
         for product in products:
             cart[str(product.id)]["product"] = ProductSerializer(product).data
         for item in cart.values():
-            item["price"] = float(item["price"])
-            item["total_price"] = item["price"] * item["quantity"]
             cart_item = {
                 "product": item["product"],
                 "quantity": item["quantity"],
-                "total_price": item["total_price"],
-                "price": item["price"],
+                "total_price": convert_price(Decimal(item["price"]) * item["quantity"]),
+                "price": convert_price(item["price"]),
             }
             yield cart_item
 
@@ -231,8 +232,8 @@ class CartDBService:
             yield {
                 "product": ProductSerializer(item.product).data,
                 "quantity": item.quantity,
-                "total_price": item.quantity * item.product.price,
-                "price": item.product.price,
+                "total_price": convert_price(item.quantity * item.product.price),
+                "price": convert_price(item.product.price),
             }
 
     def add(
