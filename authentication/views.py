@@ -53,26 +53,10 @@ class CreateCustomerView(generics.CreateAPIView):
         user = serializer.save()
 
         if user is not None:
-            refresh = RefreshToken.for_user(user)
-            response = Response(status=status.HTTP_201_CREATED)
-
             token = RefreshToken.for_user(user).access_token
-
             send_email_verification_url(user, token)
 
-            response.data = {
-                "user": CustomerSerializer(user).data,
-                "access_token": {
-                    "value": str(refresh.access_token),
-                    "expires": settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds(),
-                },
-                "refresh_token": {
-                    "value": str(refresh),
-                    "expires": settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds(),
-                },
-            }
-
-            return response
+            return Response("Account created successfully!", status=status.HTTP_201_CREATED)
 
 
 @extend_schema(tags=["authentication"])
