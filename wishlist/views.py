@@ -13,11 +13,9 @@ from utils.custom_exceptions import (
 @extend_schema(summary="Retrieve wishlist details")
 class WishlistView(APIView):
     def get(self, request):
-        products = WishlistService(request)
+        wishlist_service = WishlistService(request)
 
-        session_id = request.session.get("session_key", None)
-
-        return Response({"products": products, "sessionid": session_id}, status=status.HTTP_200_OK)
+        return Response({"products": wishlist_service, "sessionid": wishlist_service.get_session_id()}, status=status.HTTP_200_OK)
 
 
 @extend_schema(summary="Add item to wishlist")
@@ -32,9 +30,7 @@ class AddToWishlistView(APIView):
         except ProductAlreadyExistException:
             raise ProductAlreadyExistException
 
-        session_id = request.session.get("session_key", None)
-
-        return Response({"products": wishlist_service, "sessionid": session_id}, status=status.HTTP_200_OK)
+        return Response({"products": wishlist_service, "sessionid": wishlist_service.get_session_id()}, status=status.HTTP_200_OK)
 
 
 @extend_schema(summary="Remove item from wishlist")
@@ -49,6 +45,4 @@ class RemoveFromWishlistView(APIView):
         except ProductNotExistException:
             raise
 
-        session_id = request.session.get("session_key", None)
-
-        return Response({"products": wishlist_service, "sessionid": session_id}, status=status.HTTP_204_NO_CONTENT)
+        return Response({"products": wishlist_service, "sessionid": wishlist_service.get_session_id()}, status=status.HTTP_200_OK)

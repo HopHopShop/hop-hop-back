@@ -15,6 +15,7 @@ class WishlistService:
         if not wishlist:
             wishlist = self.session[settings.WISHLIST_SESSION_ID] = {}
         self.wishlist = wishlist
+        self.session.save()
 
     def __iter__(self):
         product_ids = self.wishlist.keys()
@@ -57,3 +58,6 @@ class WishlistService:
         """
         self.wishlist = {}
         self.save()
+
+    def get_session_id(self):
+        return self.session.session_key
